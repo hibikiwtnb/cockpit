@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""GPU sampling works without NVIDIA tools and preserves unavailable readings."""
+import importlib.util
+import subprocess
+import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+SCRIPT = Path(__file__).resolve().parents[2] / 'pkg/systemd/overview-cards/gpu-metrics.py'
+spec = importlib.util.spec_from_file_location('gpu_metrics', SCRIPT)
+gpu = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gpu)
+
+
+class TestGpuMetrics(unittest.TestCase):
+    def test_multiple_nvidia_devices_and_unavailable_values(self):
+        output = '0, NVIDIA A3000, 42, 1024, 12288\n1, NVIDIA A3000, [N/A], 0, 12288\n'
+        with patch.object(gpu.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, output)), \
+                patch.object(gpu.Path, 'glob', return_value=[]):
+            devices = gpu.collect()
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(devices[0]['busy'], 42)
+        self.assertEqual(devices[0]['used'], 1024)
+        self.assertIsNone(devices[1]['busy'])
+        self.assertEqual(devices[1]['used'], 0)
+
+    def test_missing_nvidia_tool_and_unsupported_radeon(self):
+        card = Path('/sys/class/drm/card0')
+        def read(path):
+            return '0x1002' if path.name == 'vendor' else None
+        with patch.object(gpu.subprocess, 'run', side_effect=FileNotFoundError), \
+                patch.object(gpu.Path, 'glob', return_value=[card]), \
+                patch.object(gpu, 'read', side_effect=read):
+            devices = gpu.collect()
+        self.assertEqual(len(devices), 1)
+        self.assertIsNone(devices[0]['busy'])
+        self.assertIsNone(devices[0]['used'])
+
+    def test_amdgpu_sysfs_units(self):
+        with tempfile.TemporaryDirectory() as directory:
+            card = Path(directory) / 'card0'
+            device = card / 'device'
+            device.mkdir(parents=True)
+            for name, value in [('vendor', '0x1002'), ('gpu_busy_percent', '57'),
+                                ('mem_info_vram_used', '1048576'),
+                                ('mem_info_vram_total', '8388608')]:
+                (device / name).write_text(value)
+            with patch.object(gpu.subprocess, 'run', side_effect=FileNotFoundError), \
+                    patch.object(gpu.Path, 'glob', return_value=[card]):
+                devices = gpu.collect()
+        self.assertEqual(devices[0]['busy'], 57)
+        self.assertEqual(devices[0]['used'], 1)
+        self.assertEqual(devices[0]['total'], 8)
+
+    def test_driver_timeout(self):
+        with patch.object(gpu.subprocess, 'run', side_effect=subprocess.TimeoutExpired('nvidia-smi', 2)), \
+                patch.object(gpu.Path, 'glob', return_value=[]):
+            self.assertEqual(gpu.collect(), [])
+
+    def test_invalid_and_nonfinite_metrics(self):
+        for value in ['[N/A]', 'NaN', 'inf', '-1', None]:
+            self.assertIsNone(gpu.number(value))
+        self.assertEqual(gpu.number('0'), 0)
+
+
+if __name__ == '__main__':
+    unittest.main()

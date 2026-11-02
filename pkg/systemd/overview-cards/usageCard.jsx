@@ -9,6 +9,8 @@ import { Progress, ProgressMeasureLocation, ProgressVariant } from "@patternfly/
 
 import * as machine_info from "machine-info.js";
 import cockpit from "cockpit";
+import * as python from "python";
+import gpu_metrics from "./gpu-metrics.py";
 
 import "./usageCard.scss";
 
@@ -32,6 +34,9 @@ export class UsageCard extends React.Component {
 
         this.metrics_channel = null;
         this.samples = [];
+        this.gpu_timer = null;
+        this.gpu_process = null;
+        this.gpu_active = false;
 
         this.state = {
             memTotal: 0, // bytes
@@ -39,6 +44,8 @@ export class UsageCard extends React.Component {
             memUsedText: " ",
             numCpu: 1, // number
             cpuUsed: 0, // percentage
+            gpus: [],
+            gpuError: false,
         };
 
         this.onVisibilityChange = this.onVisibilityChange.bind(this);
@@ -57,9 +64,47 @@ export class UsageCard extends React.Component {
 
     componentWillUnmount() {
         cockpit.removeEventListener("visibilitychange", this.onVisibilityChange);
+        this.stopGpuMetrics();
+        if (this.metrics_channel)
+            this.metrics_channel.close();
+    }
+
+    stopGpuMetrics() {
+        this.gpu_active = false;
+        window.clearTimeout(this.gpu_timer);
+        if (this.gpu_process) {
+            this.gpu_process.close();
+            this.gpu_process = null;
+        }
+    }
+
+    async updateGpuMetrics() {
+        const process = python.spawn(gpu_metrics, [], { err: "message" });
+        this.gpu_process = process;
+        try {
+            const output = await process;
+            if (this.gpu_active && this.gpu_process === process)
+                this.setState({ gpus: JSON.parse(output), gpuError: false });
+        } catch (error) {
+            if (this.gpu_active && this.gpu_process === process)
+                this.setState({ gpus: [], gpuError: true });
+        } finally {
+            if (this.gpu_process === process) {
+                this.gpu_process = null;
+                if (this.gpu_active)
+                    this.gpu_timer = window.setTimeout(() => this.updateGpuMetrics(), 3000);
+            }
+        }
     }
 
     onVisibilityChange() {
+        if (cockpit.hidden) {
+            this.stopGpuMetrics();
+        } else if (!this.gpu_active) {
+            this.gpu_active = true;
+            this.updateGpuMetrics();
+        }
+
         if (cockpit.hidden && this.metrics_channel !== null) {
             this.metrics_channel.removeEventListener("message", this.onMetricsUpdate);
             this.metrics_channel.close();
@@ -144,6 +189,37 @@ export class UsageCard extends React.Component {
                                         measureLocation={ProgressMeasureLocation.outside} />
                                 </td>
                             </tr>
+                            {this.state.gpus.map((gpu, index) => {
+                                const id = "system-usage-gpu-" + index;
+                                const busy = gpu.busy === null ? null : Math.min(100, gpu.busy);
+                                let label = busy === null ? _("Utilization unavailable") : Math.round(busy) + "%";
+                                if (gpu.used !== null && gpu.total > 0) {
+                                    label += " · " + cockpit.format(_("$0 / $1 MiB VRAM"),
+                                                                   Math.round(gpu.used), Math.round(gpu.total));
+                                }
+                                return (
+                                    <tr className="pf-v6-c-table__tr" key={gpu.id}>
+                                        <th className="pf-v6-c-table__th" id={id} scope="row">
+                                            {_("GPU")} {index} <small>{gpu.name}</small>
+                                        </th>
+                                        <td className="pf-v6-c-table__td">
+                                            {busy === null ? <span>{label}</span> :
+                                            <Progress value={busy}
+                                                className="pf-m-sm"
+                                                min={0} max={100}
+                                                variant={busy > 90 ? ProgressVariant.danger : undefined}
+                                                label={label}
+                                                aria-labelledby={id}
+                                                measureLocation={ProgressMeasureLocation.outside} />}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {this.state.gpuError &&
+                                <tr className="pf-v6-c-table__tr">
+                                    <th className="pf-v6-c-table__th" scope="row">{_("GPU")}</th>
+                                    <td className="pf-v6-c-table__td">{_("GPU metrics unavailable")}</td>
+                                </tr>}
                         </tbody>
                     </table>
                 </CardBody>
