@@ -195,7 +195,7 @@ export class UsageCard extends React.Component {
                                 let label = busy === null ? _("Utilization unavailable") : Math.round(busy) + "%";
                                 if (gpu.used !== null && gpu.total > 0) {
                                     label += " · " + cockpit.format(_("$0 / $1 MiB VRAM"),
-                                                                   Math.round(gpu.used), Math.round(gpu.total));
+                                                                    Math.round(gpu.used), Math.round(gpu.total));
                                 }
                                 if (gpu.used !== null && !gpu.total) {
                                     label += " · " + cockpit.format(_("$0 MiB VRAM"), Math.round(gpu.used));
@@ -210,8 +210,9 @@ export class UsageCard extends React.Component {
                                             {_("GPU")} {index} <small>{gpu.name}</small>
                                         </th>
                                         <td className="pf-v6-c-table__td">
-                                            {busy === null ? <span>{label}</span> :
-                                            <Progress value={busy}
+                                            {busy === null
+                                                ? <span>{label}</span>
+                                                : <Progress value={busy}
                                                 className="pf-m-sm"
                                                 min={0} max={100}
                                                 variant={busy > 90 ? ProgressVariant.danger : undefined}
