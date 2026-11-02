@@ -1154,6 +1154,10 @@ function debug(...args) {
                 wanted = "/" + url_root + wanted;
         }
 
+        // Start local logins on the overview instead of restoring the previous page.
+        if (!machine && !environment.is_cockpit_client)
+            wanted = (url_root ? "/" + url_root : "") + "/system";
+
         /* clean up sessionStorage. clear anything that isn't prefixed
          * with an application and anything prefixed with our application.
          */

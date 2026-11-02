@@ -1275,7 +1275,7 @@ class OsUpdates extends React.Component {
     initializeManualUpdates() {
         watchRedHatSubscription(registered => this.setState({ unregistered: !registered }));
         page_status.set_own(null);
-        this.setState({ state: "manual" });
+        this.loadUpdates();
     }
 
     async handleRunningUpdate(promise) {
@@ -1378,14 +1378,6 @@ class OsUpdates extends React.Component {
         }
 
         switch (this.state.state) {
-        case "manual":
-            return <EmptyStatePanel
-                title={_("Check for updates")}
-                headingLevel="h5"
-                paragraph={_("Automatic update checks are disabled.")}
-                action={_("Check for updates")}
-                onAction={this.handleRefresh}
-            />;
         case "loading":
         case "refreshing":
         case "locked":
