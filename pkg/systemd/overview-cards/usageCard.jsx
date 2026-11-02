@@ -79,7 +79,7 @@ export class UsageCard extends React.Component {
     }
 
     async updateGpuMetrics() {
-        const process = python.spawn(gpu_metrics, [], { err: "message" });
+        const process = python.spawn(gpu_metrics, [], { err: "message", superuser: "try" });
         this.gpu_process = process;
         try {
             const output = await process;
@@ -197,6 +197,13 @@ export class UsageCard extends React.Component {
                                     label += " · " + cockpit.format(_("$0 / $1 MiB VRAM"),
                                                                    Math.round(gpu.used), Math.round(gpu.total));
                                 }
+                                if (gpu.used !== null && !gpu.total) {
+                                    label += " · " + cockpit.format(_("$0 MiB VRAM"), Math.round(gpu.used));
+                                    if (gpu.vramPercent !== undefined && gpu.vramPercent !== null)
+                                        label += " (" + gpu.vramPercent + "%)";
+                                }
+                                if (gpu.temperature !== undefined && gpu.temperature !== null)
+                                    label += " · " + cockpit.format(_("$0 °C"), Math.round(gpu.temperature));
                                 return (
                                     <tr className="pf-v6-c-table__tr" key={gpu.id}>
                                         <th className="pf-v6-c-table__th" id={id} scope="row">

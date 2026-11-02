@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Read GPU metrics without elevated privileges or additional Python packages."""
+"""Read GPU metrics using sysfs and optional vendor tools."""
 import csv
 import io
 import json
 import math
+import re
 import subprocess
 from pathlib import Path
 
@@ -21,6 +22,35 @@ def read(path):
         return path.read_text().strip()
     except OSError:
         return None
+
+
+def radeon_metrics(card):
+    """Sample the selected DRM card; permissions and missing tools are optional."""
+    try:
+        result = subprocess.run(
+            ["radeontop", "-p", "/dev/dri/" + card.name, "-d", "-", "-l", "1"],
+            capture_output=True, text=True, timeout=3, check=True,
+            env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    busy = re.search(r"(?:^|, )gpu ([\d.]+)%", result.stdout)
+    vram = re.search(r"(?:^|, )vram ([\d.]+)% ([\d.]+)mb", result.stdout)
+    metrics = {}
+    if busy:
+        metrics["busy"] = number(busy[1])
+    if vram:
+        metrics["used"] = number(vram[2])
+        metrics["vramPercent"] = number(vram[1])
+    return metrics
+
+
+def temperature(device):
+    for sensor in sorted((device / "hwmon").glob("hwmon*/temp1_input")):
+        value = number(read(sensor))
+        if value is not None:
+            return value / 1000
+    return None
 
 
 def collect():
@@ -50,10 +80,14 @@ def collect():
         driver = (device / "driver").resolve().name
         used = number(read(device / "mem_info_vram_used"))
         total = number(read(device / "mem_info_vram_total"))
-        devices.append(dict(id=card.name, name=driver + " (" + card.name + ")",
+        metrics = dict(id=card.name, name=driver + " (" + card.name + ")",
                             busy=number(read(device / "gpu_busy_percent")),
                             used=used / 1048576 if used is not None else None,
-                            total=total / 1048576 if total is not None else None))
+                            total=total / 1048576 if total is not None else None,
+                       temperature=temperature(device))
+        if driver == "radeon":
+            metrics.update(radeon_metrics(card))
+        devices.append(metrics)
     return devices
 
 

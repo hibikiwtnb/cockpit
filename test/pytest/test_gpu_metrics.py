@@ -53,6 +53,38 @@ class TestGpuMetrics(unittest.TestCase):
         self.assertEqual(devices[0]['used'], 1)
         self.assertEqual(devices[0]['total'], 8)
 
+    def test_radeon_sample_and_card_selection(self):
+        output = ('Dumping to -, line limit 1.\n'
+                  '1234: bus 01, gpu 42.50%, vram 5.72% 58.55mb, '
+                  'mclk inf% 0.300ghz, sclk 36.36% 0.300ghz\n')
+        with patch.object(gpu.subprocess, 'run',
+                          return_value=subprocess.CompletedProcess([], 0, output)) as run:
+            metrics = gpu.radeon_metrics(Path('/sys/class/drm/card1'))
+        self.assertEqual(metrics, {'busy': 42.5, 'used': 58.55, 'vramPercent': 5.72})
+        self.assertIn('/dev/dri/card1', run.call_args.args[0])
+        self.assertEqual(run.call_args.kwargs['env']['LC_ALL'], 'C')
+
+    def test_radeon_unavailable_and_timeout(self):
+        for error in [FileNotFoundError(), PermissionError(),
+                      subprocess.CalledProcessError(1, 'radeontop'),
+                      subprocess.TimeoutExpired('radeontop', 3)]:
+            with patch.object(gpu.subprocess, 'run', side_effect=error):
+                self.assertEqual(gpu.radeon_metrics(Path('card0')), {})
+
+    def test_radeon_invalid_sample_does_not_report_zero(self):
+        result = subprocess.CompletedProcess([], 0, 'Cannot access GPU registers')
+        with patch.object(gpu.subprocess, 'run', return_value=result):
+            self.assertEqual(gpu.radeon_metrics(Path('card0')), {})
+
+    def test_temperature_units_and_missing_sensor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            device = Path(directory)
+            self.assertIsNone(gpu.temperature(device))
+            sensor = device / 'hwmon/hwmon2'
+            sensor.mkdir(parents=True)
+            (sensor / 'temp1_input').write_text('34500')
+            self.assertEqual(gpu.temperature(device), 34.5)
+
     def test_driver_timeout(self):
         with patch.object(gpu.subprocess, 'run', side_effect=subprocess.TimeoutExpired('nvidia-smi', 2)), \
                 patch.object(gpu.Path, 'glob', return_value=[]):
