@@ -10,6 +10,7 @@ import { Progress, ProgressMeasureLocation, ProgressVariant } from "@patternfly/
 import * as machine_info from "machine-info.js";
 import cockpit from "cockpit";
 import * as python from "python";
+import { superuser } from "superuser";
 import gpu_metrics from "./gpu-metrics.py";
 
 import "./usageCard.scss";
@@ -50,6 +51,7 @@ export class UsageCard extends React.Component {
 
         this.onVisibilityChange = this.onVisibilityChange.bind(this);
         this.onMetricsUpdate = this.onMetricsUpdate.bind(this);
+        this.onGpuPermissionChange = this.onGpuPermissionChange.bind(this);
     }
 
     componentDidMount() {
@@ -59,11 +61,13 @@ export class UsageCard extends React.Component {
                     numCpu: info.cpus,
                 }));
         cockpit.addEventListener("visibilitychange", this.onVisibilityChange);
+        superuser.addEventListener("changed", this.onGpuPermissionChange);
         this.onVisibilityChange();
     }
 
     componentWillUnmount() {
         cockpit.removeEventListener("visibilitychange", this.onVisibilityChange);
+        superuser.removeEventListener("changed", this.onGpuPermissionChange);
         this.stopGpuMetrics();
         if (this.metrics_channel)
             this.metrics_channel.close();
@@ -78,21 +82,44 @@ export class UsageCard extends React.Component {
         }
     }
 
+    onGpuPermissionChange() {
+        this.stopGpuMetrics();
+        if (!cockpit.hidden) {
+            this.gpu_active = true;
+            this.updateGpuMetrics();
+        }
+    }
+
     async updateGpuMetrics() {
-        const process = python.spawn(gpu_metrics, [], { err: "message", superuser: "try" });
+        const process = python.spawn(gpu_metrics, ["--watch"], { err: "message", superuser: "try" });
         this.gpu_process = process;
+        let pending = "";
+        process.stream(chunk => {
+            if (!this.gpu_active || this.gpu_process !== process)
+                return;
+            pending += chunk;
+            let end;
+            while ((end = pending.indexOf("\n")) !== -1) {
+                const line = pending.slice(0, end);
+                pending = pending.slice(end + 1);
+                try {
+                    this.setState({ gpus: JSON.parse(line), gpuError: false });
+                } catch (error) {
+                    this.setState({ gpuError: true });
+                }
+            }
+        });
         try {
-            const output = await process;
-            if (this.gpu_active && this.gpu_process === process)
-                this.setState({ gpus: JSON.parse(output), gpuError: false });
+            await process;
         } catch (error) {
-            if (this.gpu_active && this.gpu_process === process)
-                this.setState({ gpus: [], gpuError: true });
+            // Stopping a hidden page or changing privileges also closes the process.
         } finally {
             if (this.gpu_process === process) {
                 this.gpu_process = null;
-                if (this.gpu_active)
+                if (this.gpu_active) {
+                    this.setState({ gpus: [], gpuError: true });
                     this.gpu_timer = window.setTimeout(() => this.updateGpuMetrics(), 3000);
+                }
             }
         }
     }

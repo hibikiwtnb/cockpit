@@ -85,6 +85,36 @@ class TestGpuMetrics(unittest.TestCase):
             (sensor / 'temp1_input').write_text('34500')
             self.assertEqual(gpu.temperature(device), 34.5)
 
+    def test_streaming_collection_does_not_restart_vendor_tools(self):
+        streams = gpu.VendorStreams()
+        streams.processes['nvidia'] = unittest.mock.Mock(poll=lambda: None)
+        streams.values['nvidia'] = {'0': dict(id='nvidia-0', name='NVIDIA', busy=25, used=1024, total=4096)}
+        with patch.object(gpu.subprocess, 'run', side_effect=AssertionError('Vendor tool restarted')), \
+                patch.object(gpu.Path, 'glob', return_value=[]):
+            for _ in range(3):
+                self.assertEqual(gpu.collect(streams)[0]['busy'], 25)
+
+    def test_dead_vendor_stream_does_not_leave_stale_metrics(self):
+        streams = gpu.VendorStreams()
+        streams.processes['nvidia'] = unittest.mock.Mock(poll=lambda: 1)
+        streams.values['nvidia'] = {'0': dict(id='nvidia-0', name='NVIDIA', busy=99, used=1024, total=4096)}
+        self.assertIsNone(streams.nvidia()[0]['busy'])
+        self.assertIsNone(streams.nvidia()[0]['used'])
+        streams.processes['card0'] = unittest.mock.Mock(poll=lambda: 1)
+        streams.values['card0'] = {'busy': 99, 'used': 1024}
+        self.assertEqual(streams.radeon(Path('card0')), {})
+
+    def test_stream_cleanup_terminates_children(self):
+        streams = gpu.VendorStreams()
+        process = unittest.mock.Mock()
+        process.poll.return_value = None
+        process.wait.side_effect = [subprocess.TimeoutExpired('radeontop', 1), 0]
+        streams.processes['card0'] = process
+        streams.close()
+        process.terminate.assert_called_once()
+        process.kill.assert_called_once()
+        process.stdout.close.assert_called_once()
+
     def test_driver_timeout(self):
         with patch.object(gpu.subprocess, 'run', side_effect=subprocess.TimeoutExpired('nvidia-smi', 2)), \
                 patch.object(gpu.Path, 'glob', return_value=[]):

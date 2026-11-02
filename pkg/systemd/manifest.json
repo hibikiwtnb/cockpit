@@ -83,7 +83,7 @@
 
     "libexecdir": "${libexecdir}",
 
-    "preload": [ "index", "services" ],
+    "preload": [ "index" ],
 
     "content-security-policy": "img-src 'self' data:"
 }

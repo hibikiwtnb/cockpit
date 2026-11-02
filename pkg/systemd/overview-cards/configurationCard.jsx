@@ -17,12 +17,8 @@ import { TextInput } from "@patternfly/react-core/dist/esm/components/TextInput/
 import host_keys_script from "./ssh-list-host-keys.sh";
 import cockpit from "cockpit";
 import { superuser } from "superuser";
-import { useObject, useEvent } from "hooks.js";
 import { EmptyStatePanel } from "cockpit-components-empty-state.jsx";
 import { ServerTimeConfig } from 'serverTime.js';
-import { RealmdClient, RealmButton } from "./realmd.jsx";
-import { TunedPerformanceProfile } from './tuned-dialog.jsx';
-import { CryptoPolicyRow } from './cryptoPolicies.jsx';
 import { useDialogs } from "dialogs.jsx";
 import { useInit } from "hooks";
 
@@ -32,10 +28,8 @@ const _ = cockpit.gettext;
 
 export const ConfigurationCard = ({ hostname }) => {
     const Dialogs = useDialogs();
-    const realmd_client = useObject(() => new RealmdClient(), null, []);
-    useEvent(realmd_client, "changed");
 
-    const hostname_button = (superuser.allowed && realmd_client.allowHostnameChange())
+    const hostname_button = superuser.allowed
         ? (
             <Button id="system_information_hostname_button" variant="link"
                     onClick={() => Dialogs.show(<PageSystemInformationChangeHostname />)}
@@ -62,18 +56,6 @@ export const ConfigurationCard = ({ hostname }) => {
                             <th className="pf-v6-c-table__th" scope="row">{_("System time")}</th>
                             <td className="pf-v6-c-table__td" data-label="system-time"><ServerTimeConfig /></td>
                         </tr>
-
-                        <tr className="pf-v6-c-table__tr">
-                            <th className="pf-v6-c-table__th" scope="row">{_("Domain")}</th>
-                            <td className="pf-v6-c-table__td"><RealmButton realmd_client={realmd_client} /></td>
-                        </tr>
-
-                        <tr className="pf-v6-c-table__tr">
-                            <th className="pf-v6-c-table__th" scope="row">{_("Performance profile")}</th>
-                            <td className="pf-v6-c-table__td"><TunedPerformanceProfile /></td>
-                        </tr>
-
-                        <CryptoPolicyRow />
 
                         <tr className="pf-v6-c-table__tr">
                             <th className="pf-v6-c-table__th" scope="row">{_("Secure shell keys")}</th>
@@ -140,21 +122,7 @@ const SystemInformationSshKeys = () => {
                 });
     }
 
-    function create_keyUpdater() {
-        /*
-         * Yes, we do refresh the keys while the dialog is open.
-         * It may occur that sshd is not running at the point when
-         * we try, or in rare cases the keys may change.
-         */
-        keysUpdate();
-        return window.setInterval(keysUpdate, 10 * 1000);
-    }
-
-    function destroy_keyUpdater(interval) {
-        window.clearInterval(interval);
-    }
-
-    useObject(create_keyUpdater, destroy_keyUpdater, []);
+    useInit(keysUpdate);
 
     let body = null;
     if (error)
