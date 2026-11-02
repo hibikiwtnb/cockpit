@@ -23,5 +23,5 @@
         }
     },
 
-    "preload": [ "index" ]
+    "preload": []
 }

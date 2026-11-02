@@ -1096,7 +1096,7 @@ class OsUpdates extends React.Component {
                 this.handleRunningUpdate(running_update.promise);
             } else {
                 // no running updates found, proceed to showing available updates
-                this.initialLoadOrRefresh();
+                this.initializeManualUpdates();
             }
         } catch (err) {
             this.handleLoadError(err);
@@ -1272,33 +1272,10 @@ class OsUpdates extends React.Component {
         }
     }
 
-    initialLoadOrRefresh() {
+    initializeManualUpdates() {
         watchRedHatSubscription(registered => this.setState({ unregistered: !registered }));
-
-        cockpit.addEventListener("visibilitychange", () => {
-            if (!cockpit.hidden)
-                this.loadOrRefresh(false);
-        });
-
-        if (!cockpit.hidden)
-            this.loadOrRefresh(true);
-        else
-            this.loadUpdates();
-    }
-
-    async loadOrRefresh(always_load) {
-        try {
-            const seconds = await this.state.packageManager.get_last_refresh_time();
-            this.setState({ timeSinceRefresh: seconds });
-
-            // automatically trigger refresh for ≥ 1 day or if never refreshed
-            if (seconds >= 24 * 3600 || seconds < 0)
-                this.handleRefresh();
-            else if (always_load)
-                this.loadUpdates();
-        } catch (exc) {
-            this.handleLoadError(exc);
-        }
+        page_status.set_own(null);
+        this.setState({ state: "manual" });
     }
 
     async handleRunningUpdate(promise) {
@@ -1401,6 +1378,14 @@ class OsUpdates extends React.Component {
         }
 
         switch (this.state.state) {
+        case "manual":
+            return <EmptyStatePanel
+                title={_("Check for updates")}
+                headingLevel="h5"
+                paragraph={_("Automatic update checks are disabled.")}
+                action={_("Check for updates")}
+                onAction={this.handleRefresh}
+            />;
         case "loading":
         case "refreshing":
         case "locked":
