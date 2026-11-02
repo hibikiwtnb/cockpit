@@ -192,35 +192,54 @@ export class UsageCard extends React.Component {
                             {this.state.gpus.map((gpu, index) => {
                                 const id = "system-usage-gpu-" + index;
                                 const busy = gpu.busy === null ? null : Math.min(100, gpu.busy);
+                                const percent = gpu.total > 0 && gpu.used !== null
+                                    ? Math.min(100, 100 * gpu.used / gpu.total)
+                                    : gpu.vramPercent ?? null;
+                                let memoryLabel = _("Unavailable");
+                                if (gpu.used !== null && percent !== null) {
+                                    memoryLabel = gpu.total > 0
+                                        ? cockpit.format("$0 / $1", cockpit.format_bytes(gpu.used * 1048576, { base2: true }),
+                                                         cockpit.format_bytes(gpu.total * 1048576, { base2: true }))
+                                        : cockpit.format("$0 MiB ($1%)", Math.round(gpu.used), Math.round(percent));
+                                }
                                 let label = busy === null ? _("Utilization unavailable") : Math.round(busy) + "%";
-                                if (gpu.used !== null && gpu.total > 0) {
-                                    label += " · " + cockpit.format(_("$0 / $1 MiB VRAM"),
-                                                                    Math.round(gpu.used), Math.round(gpu.total));
-                                }
-                                if (gpu.used !== null && !gpu.total) {
-                                    label += " · " + cockpit.format(_("$0 MiB VRAM"), Math.round(gpu.used));
-                                    if (gpu.vramPercent !== undefined && gpu.vramPercent !== null)
-                                        label += " (" + gpu.vramPercent + "%)";
-                                }
                                 if (gpu.temperature !== undefined && gpu.temperature !== null)
                                     label += " · " + cockpit.format(_("$0 °C"), Math.round(gpu.temperature));
                                 return (
-                                    <tr className="pf-v6-c-table__tr" key={gpu.id}>
-                                        <th className="pf-v6-c-table__th" id={id} scope="row">
-                                            {_("GPU")} {index} <small>{gpu.name}</small>
-                                        </th>
-                                        <td className="pf-v6-c-table__td">
-                                            {busy === null
-                                                ? <span>{label}</span>
-                                                : <Progress value={busy}
-                                                className="pf-m-sm"
-                                                min={0} max={100}
-                                                variant={busy > 90 ? ProgressVariant.danger : undefined}
-                                                label={label}
-                                                aria-labelledby={id}
-                                                measureLocation={ProgressMeasureLocation.outside} />}
-                                        </td>
-                                    </tr>
+                                    <React.Fragment key={gpu.id}>
+                                        <tr className="pf-v6-c-table__tr">
+                                            <th className="pf-v6-c-table__th" id={id} scope="row" title={gpu.name}>
+                                                {_("GPU")} {index}
+                                            </th>
+                                            <td className="pf-v6-c-table__td">
+                                                {busy === null
+                                                    ? <span>{label}</span>
+                                                    : <Progress value={busy}
+                                                        className="pf-m-sm"
+                                                        min={0} max={100}
+                                                        variant={busy > 90 ? ProgressVariant.danger : undefined}
+                                                        label={label}
+                                                        aria-labelledby={id}
+                                                        measureLocation={ProgressMeasureLocation.outside} />}
+                                            </td>
+                                        </tr>
+                                        <tr className="pf-v6-c-table__tr">
+                                            <th className="pf-v6-c-table__th" id={id + "-memory"} scope="row" title={gpu.name}>
+                                                {_("VRAM")} {index}
+                                            </th>
+                                            <td className="pf-v6-c-table__td">
+                                                {percent === null
+                                                    ? <span>{memoryLabel}</span>
+                                                    : <Progress value={percent}
+                                                        className="pf-m-sm"
+                                                        min={0} max={100}
+                                                        variant={percent > 90 ? ProgressVariant.danger : undefined}
+                                                        label={memoryLabel}
+                                                        aria-labelledby={id + "-memory"}
+                                                        measureLocation={ProgressMeasureLocation.outside} />}
+                                            </td>
+                                        </tr>
+                                    </React.Fragment>
                                 );
                             })}
                             {this.state.gpuError &&
