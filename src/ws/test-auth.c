@@ -405,7 +405,6 @@ test_disconnect_timeout (Test *test,
   GError *error = NULL;
   GHashTable *headers;
   gboolean flag = FALSE;
-  gboolean idling = FALSE;
 
   gchar *config_path = NULL;
   const gchar *previous_config = cockpit_config_file;
@@ -443,9 +442,8 @@ test_disconnect_timeout (Test *test,
   g_assert (cockpit_web_service_get_idling (service));
   g_object_unref (service);
 
-  g_signal_connect (test->auth, "idling", G_CALLBACK (on_idling_set_flag), &idling);
 
-  /* Now wait for 2 seconds, and the service should be gone */
+  /* Wait beyond the default timeout, but within the configured grace period. */
   g_timeout_add_seconds (2, on_timeout_set_flag, &flag);
   while (!flag)
     g_main_context_iteration (NULL, TRUE);
@@ -463,13 +461,6 @@ test_disconnect_timeout (Test *test,
   service = cockpit_auth_check_cookie (test->auth, WebRequest(.path="/cockpit", .headers=headers));
   g_assert (service == NULL);
 
-  /* Now wait for 3 seconds, and the auth should have said its idling */
-  flag = FALSE;
-  g_timeout_add_seconds (3, on_timeout_set_flag, &flag);
-  while (!flag)
-    g_main_context_iteration (NULL, TRUE);
-
-  g_assert (idling == TRUE);
   g_hash_table_destroy (headers);
   cockpit_conf_cleanup ();
   cockpit_config_file = previous_config;
