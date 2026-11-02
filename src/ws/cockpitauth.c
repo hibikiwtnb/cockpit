@@ -987,7 +987,8 @@ on_web_service_idling (CockpitWebService *service,
    * The minimum amount of time before a request uses this new web service,
    * otherwise it will just go away.
    */
-  session->timeout_tag = g_timeout_add_seconds (cockpit_ws_service_idle,
+  session->timeout_tag = g_timeout_add_seconds (cockpit_conf_uint ("Session", "DisconnectTimeout",
+                                                                        cockpit_ws_service_idle, 604800, 1),
                                                 on_session_timeout,
                                                 session);
 

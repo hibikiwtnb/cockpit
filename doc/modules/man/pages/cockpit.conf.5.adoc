@@ -155,6 +155,20 @@ allow *Bearer* tokens.
 *Banner*::
   The contents of the specified file (commonly */etc/issue*) are shown
   on the login page. By default, no banner is displayed.
+*DisconnectTimeout*::
+  Time in seconds to retain an authenticated session after all browser
+  connections close. Reconnecting with the existing session cookie within
+  this period does not require another password login. Defaults to 15;
+  valid values range from 1 to 604800 (seven days). This does not preserve
+  running page channels or bypass an explicit logout, service restart, or
+  the idle timeout below.
+   +
+[source,ini]
+----
+[Session]
+DisconnectTimeout=86400
+----
+
 *IdleTimeout*::
   Time in minutes after which session expires and user is logged out if
   no user action has been performed in the given time. This idle timeout

@@ -396,6 +396,88 @@ test_idle_timeout (Test *test,
 }
 
 static void
+test_disconnect_timeout (Test *test,
+                   gconstpointer data)
+{
+  GAsyncResult *result = NULL;
+  CockpitWebService *service;
+  JsonObject *login_response;
+  GError *error = NULL;
+  GHashTable *headers;
+  gboolean flag = FALSE;
+  gboolean idling = FALSE;
+
+  gchar *config_path = NULL;
+  const gchar *previous_config = cockpit_config_file;
+  gint config_fd = g_file_open_tmp ("cockpit-disconnect-XXXXXX", &config_path, &error);
+  g_assert_no_error (error);
+  close (config_fd);
+  g_file_set_contents (config_path, "[Session]\nDisconnectTimeout=4\n", -1, &error);
+  g_assert_no_error (error);
+  cockpit_conf_cleanup ();
+  cockpit_config_file = config_path;
+
+  /* The idle timeout is one second */
+  g_assert (cockpit_ws_service_idle == 1);
+
+  headers = mock_auth_basic_header ("me", "this is the password");
+  cockpit_auth_login_async (test->auth,
+                            WebRequest(.path="/cockpit", .headers=headers),
+                            on_ready_get_result, &result);
+  g_hash_table_unref (headers);
+
+  while (result == NULL)
+    g_main_context_iteration (NULL, TRUE);
+
+  headers = web_socket_util_new_headers ();
+  login_response = cockpit_auth_login_finish (test->auth, result, NULL, headers, &error);
+  g_assert (login_response != NULL);
+  json_object_unref (login_response);
+  g_object_unref (result);
+  g_assert_no_error (error);
+
+  /* Logged in ... the webservice is idle though */
+  mock_auth_include_cookie_as_if_client (headers, headers, "cockpit");
+  service = cockpit_auth_check_cookie (test->auth, WebRequest(.path="/cockpit", .headers=headers));
+  g_assert (service != NULL);
+  g_assert (cockpit_web_service_get_idling (service));
+  g_object_unref (service);
+
+  g_signal_connect (test->auth, "idling", G_CALLBACK (on_idling_set_flag), &idling);
+
+  /* Now wait for 2 seconds, and the service should be gone */
+  g_timeout_add_seconds (2, on_timeout_set_flag, &flag);
+  while (!flag)
+    g_main_context_iteration (NULL, TRUE);
+
+  /* The configured grace period keeps the cookie valid past the default. */
+  service = cockpit_auth_check_cookie (test->auth, WebRequest(.path="/cockpit", .headers=headers));
+  g_assert_nonnull (service);
+  g_object_unref (service);
+  flag = FALSE;
+  g_timeout_add_seconds (4, on_timeout_set_flag, &flag);
+  while (!flag)
+    g_main_context_iteration (NULL, TRUE);
+
+  /* Timeout, no longer logged in */
+  service = cockpit_auth_check_cookie (test->auth, WebRequest(.path="/cockpit", .headers=headers));
+  g_assert (service == NULL);
+
+  /* Now wait for 3 seconds, and the auth should have said its idling */
+  flag = FALSE;
+  g_timeout_add_seconds (3, on_timeout_set_flag, &flag);
+  while (!flag)
+    g_main_context_iteration (NULL, TRUE);
+
+  g_assert (idling == TRUE);
+  g_hash_table_destroy (headers);
+  cockpit_conf_cleanup ();
+  cockpit_config_file = previous_config;
+  unlink (config_path);
+  g_free (config_path);
+}
+
+static void
 test_process_timeout (Test *test,
                       gconstpointer data)
 {
@@ -1259,6 +1341,7 @@ main (int argc,
   g_test_add ("/auth/userpass-emptypass", Test, NULL, setup, test_userpass_emptypass, teardown);
   g_test_add ("/auth/headers-bad", Test, NULL, setup, test_headers_bad, teardown);
   g_test_add ("/auth/idle-timeout", Test, NULL, setup, test_idle_timeout, teardown);
+  g_test_add ("/auth/disconnect-timeout", Test, NULL, setup, test_disconnect_timeout, teardown);
   g_test_add ("/auth/process-timeout", Test, NULL, setup, test_process_timeout, teardown);
   g_test_add ("/auth/bad-coversation", Test, &fixture_bad_conversation,
               setup_normal, test_custom_fail, teardown_normal);
