@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 import cockpit from "cockpit";
+import * as python from "python";
+import hardware_details from "./hardware-details.py";
 
 import * as machine_info from "machine-info.js";
 const _ = cockpit.gettext;
@@ -114,8 +116,11 @@ function findMemoryDevices(udevdb, info) {
 }
 
 export default function detect() {
-    const info = { system: {}, pci: [], memory: [], graphics: [], disks: [] };
+    const info = { system: {}, pci: [], memory: [], graphics: [], disks: [], details: {} };
     const tasks = [];
+    tasks.push(python.spawn(hardware_details, [], { superuser: "try", err: "message" })
+            .then(output => { info.details = JSON.parse(output) })
+            .catch(error => console.warn("Failed to read hardware details:", error.toString())));
 
     tasks.push(machine_info.cpu_ram_info()
             .then(result => {

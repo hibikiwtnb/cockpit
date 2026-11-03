@@ -8,6 +8,8 @@ import '../lib/patternfly/patternfly-6-cockpit.scss';
 import 'polyfills'; // once per application
 
 import cockpit from "cockpit";
+import * as python from "python";
+import hardware_details from "./hardware-details.py";
 import React from "react";
 import { createRoot } from 'react-dom/client';
 
@@ -43,55 +45,16 @@ import "./hwinfo.scss";
 
 const _ = cockpit.gettext;
 
-const SystemInfo = ({ info, graphics, disks, onSecurityClick }) => {
+const SystemInfo = ({ info }) => {
     if ((!info.name || !info.version) && info.alt_name && info.alt_version) {
         info.name = info.alt_name;
         info.version = info.alt_version;
     }
 
-    const mitigations = (
-        <PrivilegedButton variant="link" buttonId="cpu_mitigations" tooltipId="tip-cpu-security"
-                    excuse={ _("The user $0 is not permitted to change cpu security mitigations") }
-                    onClick={ onSecurityClick }>
-            { _("Mitigations") }
-        </PrivilegedButton>
-    );
-
     const bios_date = Date.parse(info.bios_date); // NaN for undefined, null, or invalid dates
 
     return (
         <DescriptionList id="hwinfo-system-info-list" className="pf-m-horizontal-on-md">
-            { info.nproc !== undefined &&
-                <DescriptionListGroup>
-                    <DescriptionListTerm>{_("CPU")}</DescriptionListTerm>
-                    <DescriptionListDescription>
-                        {info.cpu_model} ({cockpit.format(cockpit.ngettext("$0 logical processor", "$0 logical processors", info.nproc), info.nproc)})
-                    </DescriptionListDescription>
-                </DescriptionListGroup> }
-            <DescriptionListGroup>
-                <DescriptionListTerm>{_("Memory")}</DescriptionListTerm>
-                <DescriptionListDescription>
-                    {info.memory_installed || info.memory
-                        ? cockpit.format_bytes(info.memory_installed || info.memory, { base2: true })
-                        : _("Unknown")}
-                </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-                <DescriptionListTerm>{_("GPU")}</DescriptionListTerm>
-                <DescriptionListDescription>
-                    {graphics.length > 0 ? graphics.map(gpu => <div key={gpu.slot}>{gpu.model}</div>) : _("Unknown")}
-                </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-                <DescriptionListTerm>{_("Storage")}</DescriptionListTerm>
-                <DescriptionListDescription>
-                    {disks.length > 0
-                        ? disks.map(disk => <div key={disk.name}>
-                            {disk.model?.trim() || disk.name} — {cockpit.format_bytes(Number(disk.size), { base2: true })} ({"/dev/" + disk.name})
-                        </div>)
-                        : _("Unknown")}
-                </DescriptionListDescription>
-            </DescriptionListGroup>
             { info.type &&
                 <DescriptionListGroup>
                     <DescriptionListTerm>{_("Type")}</DescriptionListTerm>
@@ -121,11 +84,6 @@ const SystemInfo = ({ info, graphics, disks, onSecurityClick }) => {
                     <DescriptionListDescription>{bios_date ? timeformat.date(bios_date) : info.bios_date}</DescriptionListDescription>
                 </DescriptionListGroup>
             </> }
-            { onSecurityClick !== undefined &&
-                <DescriptionListGroup>
-                    <DescriptionListTerm>{_("CPU security")}</DescriptionListTerm>
-                    <DescriptionListDescription>{mitigations}</DescriptionListDescription>
-                </DescriptionListGroup> }
         </DescriptionList>
     );
 };
@@ -262,6 +220,131 @@ const CPUSecurityMitigationsDialog = () => {
     );
 };
 
+const HardwareSpecs = ({ entries }) =>
+    <dl className="hardware-spec-grid">
+        {entries.filter(([, value]) => value !== null && value !== undefined && value !== "").map(([label, value]) =>
+            <div className="hardware-spec-row" key={label}>
+                <dt>{label}</dt><dd>{value}</dd>
+            </div>)}
+    </dl>;
+
+const mhz = value => value === null || value === undefined ? null : `${Number(value).toFixed(0)} MHz`;
+const sensor = (value, unit, precision = 1) => value === null || value === undefined ? null : `${Number(value).toFixed(precision)} ${unit}`;
+const bytes = value => value === null || value === undefined ? null : cockpit.format_bytes(value, { base2: true });
+
+const CpuInfo = ({ cpu, system, onSecurityClick }) => {
+    const f = cpu.fields || {};
+    const dmi = cpu.sockets?.[0] || {};
+    const cores = Number(f["Core(s) per socket"]) * Number(f["Socket(s)"]);
+    return <>
+        <HardwareSpecs entries={[
+            [_("Model"), f["Model name"] || system.cpu_model],
+            [_("Vendor"), f["Vendor ID"]],
+            [_("Architecture"), f.Architecture],
+            [_("Sockets"), f["Socket(s)"]],
+            [_("Physical cores"), cores || null],
+            [_("Logical processors"), f["CPU(s)"] || system.nproc],
+            [_("Threads per core"), f["Thread(s) per core"]],
+            [_("Base clock"), mhz(cpu.base_mhz)],
+            [_("Current clock (CPU 0)"), mhz(cpu.current_mhz)],
+            [_("Maximum clock"), mhz(f["CPU max MHz"])],
+            [_("Minimum clock"), mhz(f["CPU min MHz"])],
+            [_("L1 data cache"), f["L1d cache"]],
+            [_("L1 instruction cache"), f["L1i cache"]],
+            [_("L2 cache"), f["L2 cache"]],
+            [_("L3 cache"), f["L3 cache"]],
+            [_("Family / model / stepping"), [f["CPU family"], f.Model, f.Stepping].filter(Boolean).join(" / ")],
+            [_("Microcode"), cpu.microcode],
+            [_("Virtualization"), f.Virtualization],
+            [_("Frequency driver"), cpu.frequency_driver],
+            [_("Frequency governor"), cpu.governor],
+            [_("Firmware voltage"), dmi.Voltage],
+            [_("External clock"), dmi["External Clock"]],
+            [_("Socket designation"), dmi["Socket Designation"]],
+            [_("Address sizes"), f["Address sizes"]],
+        ]} />
+        {cpu.temperatures?.length > 0 && <div className="hardware-sensor-strip">
+            {cpu.temperatures.map(item => <span key={item.name}>{item.name}: <strong>{sensor(item.temperature, "°C")}</strong></span>)}
+        </div>}
+        {cpu.flags?.length > 0 && <details className="hardware-extra-details">
+            <summary>{_("Instruction sets and capabilities")}</summary>
+            <div className="hardware-capabilities">{cpu.flags.map(flag => <code key={flag}>{flag}</code>)}</div>
+        </details>}
+        {onSecurityClick && <div className="hardware-extra-details">
+            <PrivilegedButton variant="link" buttonId="cpu_mitigations" tooltipId="tip-cpu-security"
+                excuse={_("The user $0 is not permitted to change cpu security mitigations")}
+                onClick={onSecurityClick}>{_("CPU security")}</PrivilegedButton>
+        </div>}
+    </>;
+};
+
+const GpuInfo = ({ gpu }) => {
+    const n = gpu.nvidia || {};
+    const used = gpu.vram_used !== null && gpu.vram_used !== undefined && gpu.vram_total > 0
+        ? `${bytes(gpu.vram_used)} / ${bytes(gpu.vram_total)} (${(100 * gpu.vram_used / gpu.vram_total).toFixed(1)}%)`
+        : n.memory_used && n.memory_total ? `${n.memory_used} / ${n.memory_total}` : null;
+    return <>
+        <HardwareSpecs entries={[
+            [_("Model"), n.name || gpu.name],
+            [_("GPU chip"), gpu.chip],
+            [_("Vendor"), gpu.vendor],
+            [_("Board vendor"), gpu.board_vendor],
+            [_("Architecture"), n.architecture],
+            [_("Compute units"), gpu.compute_units],
+            [_("VRAM capacity"), bytes(gpu.vram_total) || n.memory_total],
+            [_("VRAM usage"), used],
+            [_("CPU-visible VRAM"), bytes(gpu.vram_visible) || n.bar1_total],
+            [_("GTT capacity"), bytes(gpu.gtt_total)],
+            [_("GTT usage"), bytes(gpu.gtt_used)],
+            [_("GPU utilization"), sensor(gpu.busy, "%") || n.utilization],
+            [_("Memory controller utilization"), sensor(gpu.memory_busy, "%") || n.memory_utilization],
+            [_("Core clock"), mhz(gpu.core_mhz) || n.core_clock],
+            [_("Maximum core clock"), mhz(gpu.max_core_mhz) || n.max_core_clock],
+            [_("Shader clock"), n.sm_clock],
+            [_("Memory clock"), mhz(gpu.memory_mhz) || n.memory_clock],
+            [_("Maximum memory clock"), n.max_memory_clock],
+            [_("Temperature"), sensor(gpu.temperature, "°C") || n.temperature],
+            [_("Critical temperature"), sensor(gpu.temperature_critical, "°C") || n.temperature_limit],
+            [_("Voltage"), sensor(gpu.voltage, "V", 3)],
+            [_("Fan speed"), sensor(gpu.fan_rpm, "RPM", 0) || n.fan],
+            [_("Fan PWM"), sensor(gpu.fan_pwm, "%")],
+            [_("Power draw"), sensor(gpu.power_watts, "W") || n.power_draw],
+            [_("Power limit"), sensor(gpu.power_cap_watts, "W") || n.power_limit],
+            [_("PCIe link"), gpu.link_speed && `${gpu.link_speed} ×${gpu.link_width}`],
+            [_("Maximum PCIe link"), gpu.max_link_speed && `${gpu.max_link_speed} ×${gpu.max_link_width}`],
+            [_("PCIe generation"), n.pcie_generation],
+            [_("Maximum PCIe generation"), n.pcie_max_generation],
+            [_("PCI address"), gpu.bus],
+            [_("PCI vendor / device"), gpu.vendor_id && `${gpu.vendor_id} / ${gpu.device_id}`],
+            [_("Subsystem IDs"), gpu.subsystem_vendor && `${gpu.subsystem_vendor} / ${gpu.subsystem_device}`],
+            [_("Revision"), gpu.revision],
+            [_("Driver"), gpu.driver],
+            [_("Driver version"), n.driver_version],
+            [_("DRM interface version"), gpu.drm_version],
+            [_("Mesa DRI version"), gpu.mesa_dri],
+            [_("Mesa EGL version"), gpu.mesa_egl],
+            [_("libdrm Radeon version"), gpu.libdrm_radeon],
+            [_("Kernel"), gpu.kernel],
+            [_("VBIOS"), gpu.vbios || n.vbios],
+            [_("Power profile"), gpu.power_profile],
+            [_("Performance level"), gpu.performance_level || n.performance_state],
+            [_("CUDA compatibility"), n.cuda_version],
+            [_("ECC mode"), n.ecc],
+            [_("UUID"), n.uuid],
+            [_("Serial number"), n.serial],
+        ]} />
+        {gpu.displays?.length > 0 && <div className="hardware-extra-details hardware-display-ports">
+            {gpu.displays.map(port => <details key={port.name}>
+                <summary>{port.name} · {port.status === "connected" ? _("Connected") : _("Disconnected")}</summary>
+                {port.modes.length > 0 && <p>{_("Supported resolutions")}: {port.modes.join(" · ")}</p>}
+            </details>)}
+        </div>}
+        {gpu.driver_source && <details className="hardware-extra-details">
+            <summary>{_("Driver build identifier")}</summary><code>{gpu.driver_source}</code>
+        </details>}
+    </>;
+};
+
 const MemoryInfo = ({ memory, total }) => {
     const modules = memory.filter(dimm => dimm.populated ?? dimm.state !== _("Absent"));
     const sizes = new Map();
@@ -307,6 +390,20 @@ const MemoryInfo = ({ memory, total }) => {
 
 const HardwareInfo = ({ info }) => {
     const [mitigationsAvailable, setMitigationsAvailable] = React.useState(false);
+    const [details, setDetails] = React.useState(info.details);
+    const [refreshing, setRefreshing] = React.useState(false);
+    const [refreshError, setRefreshError] = React.useState(null);
+    const refreshDetails = async () => {
+        setRefreshing(true);
+        try {
+            setDetails(JSON.parse(await python.spawn(hardware_details, [], { superuser: "try", err: "message" })));
+            setRefreshError(null);
+        } catch (error) {
+            setRefreshError(error.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     useInit(() => {
         availableMitigations().then(({ available }) => setMitigationsAvailable(available));
@@ -353,17 +450,16 @@ const HardwareInfo = ({ info }) => {
             </PageBreadcrumb>
             <PageSection hasBodyWrapper={false}>
                 <Gallery hasGutter>
-                    <Card isPlain>
-                        <CardHeader>
-                            <CardTitle component="h2">{_("System information")}</CardTitle>
-                        </CardHeader>
+                    <div className="hardware-snapshot-actions">
+                        <span>{_("Snapshot")}{details.sampled_at && " · " + timeformat.dateTime(details.sampled_at * 1000)}</span>
+                        <Button variant="secondary" isLoading={refreshing} isDisabled={refreshing} onClick={refreshDetails}>{_("Refresh")}</Button>
+                    </div>
+                    {refreshError && <Alert isInline variant="warning" title={_("Failed to refresh hardware information")}>{refreshError}</Alert>}
+                    <Card isPlain id="cpu-information">
+                        <CardHeader><CardTitle component="h2">{_("CPU")}</CardTitle></CardHeader>
                         <CardBody>
-                            <SystemInfo info={info.system}
-                                        graphics={info.graphics}
-                                        disks={info.disks}
-                                        onSecurityClick={mitigationsAvailable
-                                            ? () => Dialogs.show(<CPUSecurityMitigationsDialog />)
-                                            : undefined } />
+                            <CpuInfo cpu={details.cpu || {}} system={info.system}
+                                onSecurityClick={mitigationsAvailable ? () => Dialogs.show(<CPUSecurityMitigationsDialog />) : undefined} />
                         </CardBody>
                     </Card>
                     <Card isPlain id="memory-listing">
@@ -373,6 +469,22 @@ const HardwareInfo = ({ info }) => {
                         <CardBody className="contains-list">
                             { memory }
                         </CardBody>
+                    </Card>
+                    {(details.gpus || info.graphics.map(gpu => ({ name: gpu.model, vendor: gpu.vendor, bus: gpu.slot }))).map((gpu, index) =>
+                        <Card isPlain key={gpu.bus} id={"gpu-information-" + index}>
+                            <CardHeader><CardTitle component="h2">GPU {index} · {gpu.name}</CardTitle></CardHeader>
+                            <CardBody><GpuInfo gpu={gpu} /></CardBody>
+                        </Card>)}
+                    <Card isPlain id="storage-information">
+                        <CardHeader><CardTitle component="h2">{_("Storage")}</CardTitle></CardHeader>
+                        <CardBody>
+                            <HardwareSpecs entries={info.disks.map(disk => ["/dev/" + disk.name,
+                                `${disk.model?.trim() || disk.name} · ${bytes(Number(disk.size))}${disk.tran ? " · " + disk.tran.toUpperCase() : ""}`])} />
+                        </CardBody>
+                    </Card>
+                    <Card isPlain>
+                        <CardHeader><CardTitle component="h2">{_("System information")}</CardTitle></CardHeader>
+                        <CardBody><SystemInfo info={info.system} /></CardBody>
                     </Card>
                     <Card isPlain id="pci-listing">
                         <CardHeader>
