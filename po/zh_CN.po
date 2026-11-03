@@ -13399,3 +13399,103 @@ msgstr "通过Cockpit Web Console进行验证后才能执行特权操作"
 
 #~ msgid "Show Performance Options"
 #~ msgstr "显示性能选项"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Shared system memory limit"
+msgstr "显卡可共享的系统内存上限"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Shared system memory usage"
+msgstr "显卡共享的系统内存用量"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Dedicated graphics memory"
+msgstr "显卡专用内存容量"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Dedicated graphics memory usage"
+msgstr "显卡专用内存用量"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Graphics memory accessible to CPU"
+msgstr "CPU 可直接访问的显卡内存"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Graphics memory activity"
+msgstr "显存读写忙碌率"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Graphics chip"
+msgstr "显示芯片"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "GPU processing units"
+msgstr "GPU 运算单元"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Fan control level"
+msgstr "风扇控制比例（非实际转速）"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Graphics driver interface version"
+msgstr "显示驱动接口版本"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "3D graphics library version"
+msgstr "3D 图形库版本"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Display interface library version"
+msgstr "显示接口库版本"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Radeon driver library version"
+msgstr "Radeon 驱动库版本"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Linux kernel version"
+msgstr "Linux 内核版本"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Graphics card firmware"
+msgstr "显卡固件版本"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Graphics card identifier"
+msgstr "显卡标识码"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Graphics card connection speed"
+msgstr "显卡连接速度"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Maximum connection speed"
+msgstr "最高连接速度"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Hardware location"
+msgstr "硬件位置"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Hardware device IDs"
+msgstr "硬件设备代码"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Board device IDs"
+msgstr "显卡板卡代码"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Supported CUDA version"
+msgstr "驱动支持的 CUDA 版本"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "Memory error correction"
+msgstr "显存错误纠正"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "CPU cores"
+msgstr "CPU 核心数"
+
+#: pkg/systemd/hwinfo.jsx
+msgid "CPU threads"
+msgstr "CPU 线程数"
