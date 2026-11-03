@@ -98,6 +98,8 @@ function findMemoryDevices(udevdb, info) {
 
         memoryArray.push({
             locator,
+            slot: props[`MEMORY_DEVICE_${slot}_LOCATOR`] || locator,
+            populated: Number(props[`MEMORY_DEVICE_${slot}_SIZE`]) > 0,
             technology: props[`MEMORY_DEVICE_${slot}_MEMORY_TECHNOLOGY`] || _("Unknown"),
             type: props[`MEMORY_DEVICE_${slot}_TYPE`] || _("Unknown"),
             size: memorySize,
@@ -146,19 +148,6 @@ export default function detect() {
                 return true;
             }));
 
-    // Fallback if systemd < 248
-    if (info.memory.length === 0) {
-        tasks.push(machine_info.memory_info()
-                .then(result => {
-                    info.memory = result;
-                    return true;
-                })
-                .catch(error => {
-                    console.warn("Failed to get dmidecode information: ", error.toString());
-                    return true;
-                }));
-    }
-
     tasks.push(cockpit.spawn(["lsblk", "--json", "--bytes", "--nodeps", "--output", "NAME,TYPE,MODEL,SIZE,TRAN"])
             .then(output => {
                 info.disks = JSON.parse(output).blockdevices
@@ -166,6 +155,15 @@ export default function detect() {
             })
             .catch(error => console.warn("Failed to get disk information:", error.toString())));
 
-    // return info after all task promises got done
-    return Promise.all(tasks).then(() => info);
+    return Promise.all(tasks).then(async () => {
+        // Older systemd versions do not expose DIMMs in the udev database.
+        if (info.memory.length === 0) {
+            try {
+                info.memory = await machine_info.memory_info();
+            } catch (error) {
+                console.warn("Failed to get dmidecode information:", error.toString());
+            }
+        }
+        return info;
+    });
 }

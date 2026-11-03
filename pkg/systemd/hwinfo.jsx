@@ -262,6 +262,47 @@ const CPUSecurityMitigationsDialog = () => {
     );
 };
 
+const MemoryInfo = ({ memory, total }) => {
+    const modules = memory.filter(dimm => dimm.populated ?? dimm.state !== _("Absent"));
+    const empty = memory.filter(dimm => !(dimm.populated ?? dimm.state !== _("Absent")));
+    const sizes = new Map();
+    modules.forEach(dimm => sizes.set(dimm.size, (sizes.get(dimm.size) || 0) + 1));
+    const configuration = Array.from(sizes, ([size, count]) => `${count} × ${size}`).join(" + ");
+    const rank = dimm => dimm.rank === _("Single rank") ? "1R" : dimm.rank === _("Dual rank") ? "2R" : "";
+
+    return <>
+        <div className="memory-summary">
+            {total > 0 && <strong>{cockpit.format_bytes(total, { base2: true })}</strong>}
+            <span>{configuration}</span>
+            <span>{cockpit.format(_("$0 / $1 slots used"), modules.length, memory.length)}</span>
+        </div>
+        <div className="memory-table-scroll" role="region" aria-label={_("Memory modules")}>
+            <table className="memory-compact-table">
+                <thead>
+                    <tr>
+                        <th scope="col">{_("Slot")}</th>
+                        <th scope="col">{_("Size")}</th>
+                        <th scope="col">{_("Type")}</th>
+                        <th scope="col">{_("Speed")}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {modules.map((dimm, index) => <tr key={dimm.locator + index}>
+                        <th scope="row" title={dimm.locator}>{dimm.slot || dimm.locator}</th>
+                        <td>{dimm.size}</td>
+                        <td title={dimm.technology}>{dimm.type}{rank(dimm) && " · " + rank(dimm)}</td>
+                        <td>{dimm.speed}</td>
+                    </tr>)}
+                </tbody>
+            </table>
+        </div>
+        {empty.length > 0 && <details className="memory-empty-slots">
+            <summary>{cockpit.format(cockpit.ngettext("$0 empty slot", "$0 empty slots", empty.length), empty.length)}</summary>
+            <div>{empty.map(dimm => dimm.slot || dimm.locator).join(" · ")}</div>
+        </details>}
+    </>;
+};
+
 const HardwareInfo = ({ info }) => {
     const [mitigationsAvailable, setMitigationsAvailable] = React.useState(false);
 
@@ -293,14 +334,7 @@ const HardwareInfo = ({ info }) => {
     }
 
     if (info.memory.length > 0) {
-        memory = (
-            <ListingTable aria-label={ _("Memory") }
-                columns={ [_("ID"), _("Memory technology"), _("Type"), _("Size"), _("State"), _("Rank"), _("Speed")]}
-                rows={ info.memory.map(dimm => ({
-                    props: { key: dimm.locator },
-                    columns: [dimm.locator, dimm.technology, dimm.type, dimm.size, dimm.state, dimm.rank, dimm.speed]
-                })) } />
-        );
+        memory = <MemoryInfo memory={info.memory} total={info.system.memory_installed || info.system.memory} />;
     } else if (!superuser.allowed) {
         memory = (<EmptyState>
             {_("Viewing memory information requires administrative access.")}
