@@ -66,7 +66,7 @@ parse_opt (int key, char *arg, struct argp_state *state)
 static struct argp_option options[] = {
   {"no-tls", OPT_NO_TLS, 0, 0,  "Don't use TLS" },
   {"port", 'p', "PORT", 0, "Local port to bind to (9090 if unset)" },
-  {"idle-timeout", OPT_IDLE_TIMEOUT, "SECONDS", 0, "Time after which to exit if there are no connections; 0 to run forever (default: 90)" },
+  {"idle-timeout", OPT_IDLE_TIMEOUT, "SECONDS", 0, "Time after which to exit if there are no connections; 0 to run forever (default: 0)" },
   { 0 }
 };
 
@@ -86,7 +86,7 @@ main (int argc, char **argv)
   /* default option values */
   arguments.no_tls = false;
   arguments.port = 9090;
-  arguments.idle_timeout = 90;
+  arguments.idle_timeout = 0;
 
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
