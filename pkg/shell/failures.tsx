@@ -97,10 +97,12 @@ export const Disconnected = ({
         if (!["disconnected", "terminated", "timeout", "connection-lost"].includes(problem))
             return;
         let timer: ReturnType<typeof setTimeout> | undefined;
-        const reconnect = () => {
+        const reconnect = (event?: Event) => {
             window.clearTimeout(timer);
             if (document.visibilityState === "hidden" || !navigator.onLine)
                 return;
+            if (event?.type === "visibilitychange" || event?.type === "online")
+                window.sessionStorage.removeItem("cockpit-auto-reconnect");
             timer = window.setTimeout(() => {
                 const key = "cockpit-auto-reconnect";
                 const previous = Number(window.sessionStorage.getItem(key) || 0);
