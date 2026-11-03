@@ -406,12 +406,14 @@ test_disconnect_timeout (Test *test,
   GHashTable *headers;
   gboolean flag = FALSE;
 
+  const gboolean no_expiry = GPOINTER_TO_INT (data);
   gchar *config_path = NULL;
   const gchar *previous_config = cockpit_config_file;
   gint config_fd = g_file_open_tmp ("cockpit-disconnect-XXXXXX", &config_path, &error);
   g_assert_no_error (error);
   close (config_fd);
-  g_file_set_contents (config_path, "[Session]\nDisconnectTimeout=4\n", -1, &error);
+  g_file_set_contents (config_path, no_expiry ? "[Session]\nDisconnectTimeout=0\n"
+                                           : "[Session]\nDisconnectTimeout=4\n", -1, &error);
   g_assert_no_error (error);
   cockpit_conf_cleanup ();
   cockpit_config_file = config_path;
@@ -457,9 +459,15 @@ test_disconnect_timeout (Test *test,
   while (!flag)
     g_main_context_iteration (NULL, TRUE);
 
-  /* Timeout, no longer logged in */
+  /* Check configured expiration after the grace period. */
   service = cockpit_auth_check_cookie (test->auth, WebRequest(.path="/cockpit", .headers=headers));
-  g_assert (service == NULL);
+  if (no_expiry)
+    {
+      g_assert_nonnull (service);
+      g_object_unref (service);
+    }
+  else
+    g_assert_null (service);
 
   g_hash_table_destroy (headers);
   cockpit_conf_cleanup ();
@@ -1333,6 +1341,7 @@ main (int argc,
   g_test_add ("/auth/headers-bad", Test, NULL, setup, test_headers_bad, teardown);
   g_test_add ("/auth/idle-timeout", Test, NULL, setup, test_idle_timeout, teardown);
   g_test_add ("/auth/disconnect-timeout", Test, NULL, setup, test_disconnect_timeout, teardown);
+  g_test_add ("/auth/disconnect-no-expiry", Test, GINT_TO_POINTER (1), setup, test_disconnect_timeout, teardown);
   g_test_add ("/auth/process-timeout", Test, NULL, setup, test_process_timeout, teardown);
   g_test_add ("/auth/bad-coversation", Test, &fixture_bad_conversation,
               setup_normal, test_custom_fail, teardown_normal);

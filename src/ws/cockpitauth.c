@@ -44,7 +44,7 @@ const gchar *cockpit_ws_session_program = NULL;
 #define WS_SESSION_SOCKET "/run/cockpit/session"
 
 /* Timeout of authenticated session when no connections */
-guint cockpit_ws_service_idle = 15;
+guint cockpit_ws_service_idle = 0;
 
 /* The amount of time a spawned process has to complete authentication */
 guint cockpit_ws_auth_process_timeout = 30;
@@ -974,6 +974,7 @@ on_web_service_idling (CockpitWebService *service,
 
   if (session->timeout_tag)
     g_source_remove (session->timeout_tag);
+  session->timeout_tag = 0;
 
   if (!g_strcmp0 (session->cookie, LOCAL_SESSION))
     {
@@ -983,14 +984,10 @@ on_web_service_idling (CockpitWebService *service,
 
   g_debug ("session is idle");
 
-  /*
-   * The minimum amount of time before a request uses this new web service,
-   * otherwise it will just go away.
-   */
-  session->timeout_tag = g_timeout_add_seconds (cockpit_conf_uint ("Session", "DisconnectTimeout",
-                                                                        cockpit_ws_service_idle, 604800, 1),
-                                                on_session_timeout,
-                                                session);
+  const guint timeout = cockpit_conf_uint ("Session", "DisconnectTimeout",
+                                          cockpit_ws_service_idle, 604800, 0);
+  if (timeout > 0)
+    session->timeout_tag = g_timeout_add_seconds (timeout, on_session_timeout, session);
 
   /*
    * Also reset the timer which checks whether anything is going on in the

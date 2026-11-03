@@ -4,7 +4,7 @@
  */
 
 import cockpit from "cockpit";
-import React from "react";
+import React, { useEffect } from "react";
 
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
 import { ClipboardCopy } from "@patternfly/react-core/dist/esm/components/ClipboardCopy/index.js";
@@ -93,6 +93,42 @@ export const Disconnected = ({
 } : {
     problem: string
 }) => {
+    useEffect(() => {
+        if (!["disconnected", "terminated", "timeout", "connection-lost"].includes(problem))
+            return;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const reconnect = () => {
+            window.clearTimeout(timer);
+            if (document.visibilityState === "hidden" || !navigator.onLine)
+                return;
+            timer = window.setTimeout(() => {
+                const key = "cockpit-auto-reconnect";
+                const previous = Number(window.sessionStorage.getItem(key) || 0);
+                if (Date.now() - previous < 15000)
+                    return;
+                window.sessionStorage.setItem(key, String(Date.now()));
+                window.location.reload();
+            }, 500);
+        };
+        document.addEventListener("visibilitychange", reconnect);
+        window.addEventListener("online", reconnect);
+        window.addEventListener("pageshow", reconnect);
+        reconnect();
+        return () => {
+            window.clearTimeout(timer);
+            document.removeEventListener("visibilitychange", reconnect);
+            window.removeEventListener("online", reconnect);
+            window.removeEventListener("pageshow", reconnect);
+        };
+    }, [problem]);
+
+    if (["disconnected", "terminated", "timeout", "connection-lost"].includes(problem)) {
+        return <div className="shell-reconnect-status" role="status">
+            <span>{_("Connection interrupted. Reconnecting…")}</span>
+            <Button isInline variant="link" onClick={() => window.location.reload()}>{_("Reconnect")}</Button>
+        </div>;
+    }
+
     return (
         <EarlyFailureReady title={_("Disconnected")}
                                reconnect

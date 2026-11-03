@@ -50,9 +50,7 @@ class Transport extends EventEmitter<{ ready(): void }> {
     #last_channel = 0;
     #channel_seed = "";
     #ws: WebSocket | ParentWebSocket | null;
-    #ignore_health_check = false;
-    #got_message = false;
-    #check_health_timer;
+    #ping_timer;
     #control_cbs: Record<string, ControlCallback> = {};
     #message_cbs: Record<string, MessageCallback> = {};
     #waiting_for_init = true;
@@ -73,18 +71,10 @@ class Transport extends EventEmitter<{ ready(): void }> {
             transport_debug("connecting to " + ws_loc);
             this.#ws = new WebSocket(ws_loc, "cockpit1");
 
-            this.#check_health_timer = window.setInterval(() => {
-                if (this.ready && this.#ws)
-                    this.#ws.send("\n{ \"command\": \"ping\" }");
-                if (!this.#got_message) {
-                    if (this.#ignore_health_check) {
-                        console.log("health check failure ignored");
-                    } else {
-                        console.log("health check failed");
-                        this.close({ problem: "timeout" });
-                    }
-                }
-                this.#got_message = false;
+            // Keep the connection alive without treating suspended browser timers as a failure.
+            this.#ping_timer = window.setInterval(() => {
+                if (this.ready && this.#ws && this.#ws.readyState === WebSocket.OPEN)
+                    this.#ws.send('\n{ "command": "ping" }');
             }, 30000);
         }
 
@@ -183,8 +173,6 @@ class Transport extends EventEmitter<{ ready(): void }> {
     }
 
     dispatch_data(arg: MessageEvent<string | ArrayBuffer>): boolean {
-        this.#got_message = true;
-
         const message = arg.data;
         let channel;
         let control: JsonObject | null = null;
@@ -231,7 +219,7 @@ class Transport extends EventEmitter<{ ready(): void }> {
         if (!options)
             options = { problem: "disconnected" };
         options.command = "close";
-        window.clearInterval(this.#check_health_timer);
+        window.clearInterval(this.#ping_timer);
         const ows = this.#ws;
         this.#ws = null;
         if (ows)
@@ -284,12 +272,9 @@ class Transport extends EventEmitter<{ ready(): void }> {
     send_control(data: JsonObject): boolean {
         if (!this.#ws && (data.command === "close" || data.command === "kill"))
             return false; /* don't complain if closed and closing */
-        if (this.#check_health_timer &&
-            data.command === "hint" && data.hint === "ignore_transport_health_check") {
-            /* This is for us, process it directly. */
-            this.#ignore_health_check = !!data.data;
+        // Older pages may still send this obsolete hint.
+        if (data.command === "hint" && data.hint === "ignore_transport_health_check")
             return false;
-        }
         return this.send_message(JSON.stringify(data), "");
     }
 

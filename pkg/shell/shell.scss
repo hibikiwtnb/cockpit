@@ -195,3 +195,24 @@ $desktop: $phone + 1px;
     --pf-v6-c-about-modal-box--BackgroundPosition: calc(100% - 30rem) 10rem;
   }
 }
+
+.shell-reconnect-banner-container {
+  pointer-events: none;
+}
+
+.shell-reconnect-status {
+  position: fixed;
+  inset-block-start: 3.5rem;
+  inset-inline-end: 0.75rem;
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-inline-size: calc(100vw - 1.5rem);
+  padding: 0.5rem 0.75rem;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-size: 0.875rem;
+  pointer-events: auto;
+}

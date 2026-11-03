@@ -132,6 +132,7 @@ const Shell = () => {
     if (config.language_direction)
         document.documentElement.dir = config.language_direction;
 
+    const reconnecting = problem && ["disconnected", "terminated", "timeout", "connection-lost"].includes(problem);
     let failure = null;
     if (problem) {
         failure = <Disconnected problem={problem} />;
@@ -174,10 +175,10 @@ const Shell = () => {
                 <TopNav state={state} />
             </div>
 
-            <Frames hidden={!!failure} state={state} />
+            <Frames hidden={!!failure && !reconnecting} state={state} />
 
             { failure &&
-            <div id="failure-content" className="area-ct-content" role="main" tabIndex={-1}>
+            <div id="failure-content" className={"area-ct-content" + (reconnecting ? " shell-reconnect-banner-container" : "")} role="main" tabIndex={-1}>
                 { failure }
             </div>
             }

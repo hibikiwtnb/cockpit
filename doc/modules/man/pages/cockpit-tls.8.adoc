@@ -83,7 +83,7 @@ getcert request -f ${CERT_FILE} -k ${KEY_FILE} -D $(hostname --fqdn)
 *--idle-timeout* _SECONDS_::
   If greater than 0, exit if no connections have happened for the given
   number of seconds, i. e. the server is idle. If not given, the default
-  is 90.
+  is 0, which disables idle exit.
 
 == Environment
 

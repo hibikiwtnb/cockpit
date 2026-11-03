@@ -164,15 +164,16 @@ allow *Bearer* tokens.
 *DisconnectTimeout*::
   Time in seconds to retain an authenticated session after all browser
   connections close. Reconnecting with the existing session cookie within
-  this period does not require another password login. Defaults to 15;
-  valid values range from 1 to 604800 (seven days). This does not preserve
+  this period does not require another password login. Defaults to 0, which
+  disables expiration after disconnect. Positive values up to 604800
+  (seven days) enable expiration. This does not preserve
   running page channels or bypass an explicit logout, service restart, or
   the idle timeout below.
    +
 [source,ini]
 ----
 [Session]
-DisconnectTimeout=86400
+DisconnectTimeout=0
 ----
 
 *IdleTimeout*::
