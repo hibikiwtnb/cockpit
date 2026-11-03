@@ -19,7 +19,6 @@ import { Card, CardBody, CardHeader, CardTitle } from "@patternfly/react-core/di
 import { DataList, DataListAction, DataListCell, DataListItem, DataListItemCells, DataListItemRow } from "@patternfly/react-core/dist/esm/components/DataList/index.js";
 import { DescriptionList, DescriptionListDescription, DescriptionListGroup, DescriptionListTerm } from "@patternfly/react-core/dist/esm/components/DescriptionList/index.js";
 import { EmptyState } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
-import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex/index.js";
 import { Gallery } from "@patternfly/react-core/dist/esm/layouts/Gallery/index.js";
 import { Page, PageBreadcrumb, PageSection } from "@patternfly/react-core/dist/esm/components/Page/index.js";
 import { Content, ContentVariants } from "@patternfly/react-core/dist/esm/components/Content/index.js";
@@ -44,7 +43,7 @@ import "./hwinfo.scss";
 
 const _ = cockpit.gettext;
 
-const SystemInfo = ({ info, onSecurityClick }) => {
+const SystemInfo = ({ info, graphics, disks, onSecurityClick }) => {
     if ((!info.name || !info.version) && info.alt_name && info.alt_version) {
         info.name = info.alt_name;
         info.version = info.alt_version;
@@ -61,55 +60,73 @@ const SystemInfo = ({ info, onSecurityClick }) => {
     const bios_date = Date.parse(info.bios_date); // NaN for undefined, null, or invalid dates
 
     return (
-        <Flex id="hwinfo-system-info-list" direction={{ default: 'column', sm: 'row' }}>
-            <FlexItem className="hwinfo-system-info-list-item" flex={{ default: 'flex_1' }}>
-                <DescriptionList className="pf-m-horizontal-on-md">
-                    { info.type &&
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("Type") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ info.type }</DescriptionListDescription>
-                        </DescriptionListGroup> }
-                    { info.name &&
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("Name") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ info.name }</DescriptionListDescription>
-                        </DescriptionListGroup> }
-                    { info.version &&
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("Version") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ info.version }</DescriptionListDescription>
-                        </DescriptionListGroup> }
-                </DescriptionList>
-            </FlexItem>
-            <FlexItem className="hwinfo-system-info-list-item" flex={{ default: 'flex_1' }}>
-                <DescriptionList className="pf-m-horizontal-on-md">
-                    { info.bios_vendor && <>
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("BIOS") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ info.bios_vendor }</DescriptionListDescription>
-                        </DescriptionListGroup>
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("BIOS version") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ info.bios_version }</DescriptionListDescription>
-                        </DescriptionListGroup>
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("BIOS date") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ bios_date ? timeformat.date(bios_date) : info.bios_date }</DescriptionListDescription>
-                        </DescriptionListGroup>
-                    </> }
-                    { info.nproc !== undefined && <>
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("CPU") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ (info.nproc > 1) ? `${info.nproc}x ${info.cpu_model}` : info.cpu_model }</DescriptionListDescription>
-                        </DescriptionListGroup>
-                        { onSecurityClick !== undefined && <DescriptionListGroup>
-                            <DescriptionListTerm>{ _("CPU security") }</DescriptionListTerm>
-                            <DescriptionListDescription>{ mitigations }</DescriptionListDescription>
-                        </DescriptionListGroup>}
-                    </> }
-                </DescriptionList>
-            </FlexItem>
-        </Flex>
+        <DescriptionList id="hwinfo-system-info-list" className="pf-m-horizontal-on-md">
+            { info.nproc !== undefined &&
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("CPU")}</DescriptionListTerm>
+                    <DescriptionListDescription>
+                        {info.cpu_model} ({cockpit.format(cockpit.ngettext("$0 logical processor", "$0 logical processors", info.nproc), info.nproc)})
+                    </DescriptionListDescription>
+                </DescriptionListGroup> }
+            <DescriptionListGroup>
+                <DescriptionListTerm>{_("Memory")}</DescriptionListTerm>
+                <DescriptionListDescription>
+                    {info.memory_installed || info.memory
+                        ? cockpit.format_bytes(info.memory_installed || info.memory, { base2: true })
+                        : _("Unknown")}
+                </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+                <DescriptionListTerm>{_("GPU")}</DescriptionListTerm>
+                <DescriptionListDescription>
+                    {graphics.length > 0 ? graphics.map(gpu => <div key={gpu.slot}>{gpu.model}</div>) : _("Unknown")}
+                </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+                <DescriptionListTerm>{_("Storage")}</DescriptionListTerm>
+                <DescriptionListDescription>
+                    {disks.length > 0
+                        ? disks.map(disk => <div key={disk.name}>
+                            {disk.model?.trim() || disk.name} — {cockpit.format_bytes(Number(disk.size), { base2: true })} ({"/dev/" + disk.name})
+                        </div>)
+                        : _("Unknown")}
+                </DescriptionListDescription>
+            </DescriptionListGroup>
+            { info.type &&
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("Type")}</DescriptionListTerm>
+                    <DescriptionListDescription>{info.type}</DescriptionListDescription>
+                </DescriptionListGroup> }
+            { info.name &&
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("Name")}</DescriptionListTerm>
+                    <DescriptionListDescription>{info.name}</DescriptionListDescription>
+                </DescriptionListGroup> }
+            { info.version &&
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("Version")}</DescriptionListTerm>
+                    <DescriptionListDescription>{info.version}</DescriptionListDescription>
+                </DescriptionListGroup> }
+            { info.bios_vendor && <>
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("BIOS")}</DescriptionListTerm>
+                    <DescriptionListDescription>{info.bios_vendor}</DescriptionListDescription>
+                </DescriptionListGroup>
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("BIOS version")}</DescriptionListTerm>
+                    <DescriptionListDescription>{info.bios_version}</DescriptionListDescription>
+                </DescriptionListGroup>
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("BIOS date")}</DescriptionListTerm>
+                    <DescriptionListDescription>{bios_date ? timeformat.date(bios_date) : info.bios_date}</DescriptionListDescription>
+                </DescriptionListGroup>
+            </> }
+            { onSecurityClick !== undefined &&
+                <DescriptionListGroup>
+                    <DescriptionListTerm>{_("CPU security")}</DescriptionListTerm>
+                    <DescriptionListDescription>{mitigations}</DescriptionListDescription>
+                </DescriptionListGroup> }
+        </DescriptionList>
     );
 };
 
@@ -306,17 +323,11 @@ const HardwareInfo = ({ info }) => {
                         </CardHeader>
                         <CardBody>
                             <SystemInfo info={info.system}
+                                        graphics={info.graphics}
+                                        disks={info.disks}
                                         onSecurityClick={mitigationsAvailable
                                             ? () => Dialogs.show(<CPUSecurityMitigationsDialog />)
                                             : undefined } />
-                        </CardBody>
-                    </Card>
-                    <Card isPlain id="pci-listing">
-                        <CardHeader>
-                            <CardTitle component="h2">{_("PCI")}</CardTitle>
-                        </CardHeader>
-                        <CardBody className="contains-list">
-                            { pci }
                         </CardBody>
                     </Card>
                     <Card isPlain id="memory-listing">
@@ -325,6 +336,14 @@ const HardwareInfo = ({ info }) => {
                         </CardHeader>
                         <CardBody className="contains-list">
                             { memory }
+                        </CardBody>
+                    </Card>
+                    <Card isPlain id="pci-listing">
+                        <CardHeader>
+                            <CardTitle component="h2">{_("PCI")}</CardTitle>
+                        </CardHeader>
+                        <CardBody className="contains-list">
+                            { pci }
                         </CardBody>
                     </Card>
                 </Gallery>

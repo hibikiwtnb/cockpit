@@ -46,11 +46,14 @@ function findPCI(udevdb, info) {
                 vendor: props.ID_VENDOR_FROM_DATABASE || "",
                 model: props.ID_MODEL_FROM_DATABASE || props.PCI_ID || ""
             });
+        if ((parseInt(props.PCI_CLASS, 16) >> 16) === 3)
+            info.graphics.push(info.pci[info.pci.length - 1]);
     }
 }
 
 function findMemoryDevices(udevdb, info) {
     const memoryArray = [];
+    let installedMemory = 0;
     const dmipath = '/devices/virtual/dmi/id';
     if (!(dmipath in udevdb))
         return;
@@ -66,6 +69,7 @@ function findMemoryDevices(udevdb, info) {
     for (let slot = 0; slot < devices; slot++) {
         let memorySize = parseInt(props[`MEMORY_DEVICE_${slot}_SIZE`], 10);
         if (memorySize) {
+            installedMemory += memorySize;
             memorySize = cockpit.format_bytes(memorySize, { base2: true });
         } else {
             memorySize = _("Unknown");
@@ -104,16 +108,18 @@ function findMemoryDevices(udevdb, info) {
     }
 
     info.memory = memoryArray;
+    info.system.memory_installed = installedMemory;
 }
 
 export default function detect() {
-    const info = { system: {}, pci: [], memory: [] };
+    const info = { system: {}, pci: [], memory: [], graphics: [], disks: [] };
     const tasks = [];
 
     tasks.push(machine_info.cpu_ram_info()
             .then(result => {
                 info.system.cpu_model = result.cpu_model || _("unknown");
                 info.system.nproc = result.cpus;
+                info.system.memory = result.memory;
                 return true;
             }));
 
@@ -152,6 +158,13 @@ export default function detect() {
                     return true;
                 }));
     }
+
+    tasks.push(cockpit.spawn(["lsblk", "--json", "--bytes", "--nodeps", "--output", "NAME,TYPE,MODEL,SIZE,TRAN"])
+            .then(output => {
+                info.disks = JSON.parse(output).blockdevices
+                        .filter(device => device.type === "disk" && !device.name.startsWith("zram"));
+            })
+            .catch(error => console.warn("Failed to get disk information:", error.toString())));
 
     // return info after all task promises got done
     return Promise.all(tasks).then(() => info);
