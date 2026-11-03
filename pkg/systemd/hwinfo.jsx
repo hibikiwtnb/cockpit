@@ -264,7 +264,6 @@ const CPUSecurityMitigationsDialog = () => {
 
 const MemoryInfo = ({ memory, total }) => {
     const modules = memory.filter(dimm => dimm.populated ?? dimm.state !== _("Absent"));
-    const empty = memory.filter(dimm => !(dimm.populated ?? dimm.state !== _("Absent")));
     const sizes = new Map();
     modules.forEach(dimm => sizes.set(dimm.size, (sizes.get(dimm.size) || 0) + 1));
     const configuration = Array.from(sizes, ([size, count]) => `${count} × ${size}`).join(" + ");
@@ -287,19 +286,22 @@ const MemoryInfo = ({ memory, total }) => {
                     </tr>
                 </thead>
                 <tbody>
-                    {modules.map((dimm, index) => <tr key={dimm.locator + index}>
-                        <th scope="row" title={dimm.locator}>{dimm.slot || dimm.locator}</th>
-                        <td>{dimm.size}</td>
-                        <td title={dimm.technology}>{dimm.type}{rank(dimm) && " · " + rank(dimm)}</td>
-                        <td>{dimm.speed}</td>
-                    </tr>)}
+                    {memory.map((dimm, index) => {
+                        const populated = dimm.populated ?? dimm.state !== _("Absent");
+                        return <tr key={dimm.locator + index}>
+                            <th scope="row" title={dimm.locator}>{dimm.slot || dimm.locator}</th>
+                            {populated
+                                ? <>
+                                    <td>{dimm.size}</td>
+                                    <td title={dimm.technology}>{dimm.type}{rank(dimm) && " · " + rank(dimm)}</td>
+                                    <td>{dimm.speed}</td>
+                                </>
+                                : <td colSpan={3}>{_("Empty")}</td>}
+                        </tr>;
+                    })}
                 </tbody>
             </table>
         </div>
-        {empty.length > 0 && <details className="memory-empty-slots">
-            <summary>{cockpit.format(cockpit.ngettext("$0 empty slot", "$0 empty slots", empty.length), empty.length)}</summary>
-            <div>{empty.map(dimm => dimm.slot || dimm.locator).join(" · ")}</div>
-        </details>}
     </>;
 };
 
